@@ -1,0 +1,23 @@
+Name: Ghassan Saad
+Andrew Id: gsaad
+Course: 15-112 Fundamentals of Programming
+Fall 2018
+
+Project description: Space Invaders
+
+For the final project, I am planning to develop a game. The game is “Space Invaders”.
+Space Invaders is a one player shooter game. The player will be able to control a ship by moving it horizontally across the bottom of the screen. The goal is to defeat five rows of ten aliens that move horizontally back and forth across the screen as they advance towards the bottom of the screen. The ship is provided with a laser canon in which the player can shot and fire the aliens while moving horizontally and he/she earns points every time he successes in hitting an alien. As more aliens are defeated, the aliens' movement speed up.
+
+On the other side, the aliens try to beat the player by firing the ship while they approach the bottom of the screen. If they reach the bottom, the alien infestation is successful and the game is over. In addition, the game is over if the alien’s shots hit the ship three times (the ship has 3 lives). There are different shapes, colors, and sizes of the aliens and the earning points differ when you defeat the aliens according to their type; for example, 20 point for red alien, 30points for blue…. etc. Beside the five rows of the aliens, a special "mystery ship" will occasionally move across the top of the screen and award bonus points if destroyed. In front of the ship there is a defending row with boxes that defend the ship from the aliens’ lasers but these boxes will be destroyed by the lasers of both the player and the alien.
+In this game I will try to add some sound effects and give the aliens certain shapes, and the background of the game will give player a feeling as if he is fighting aliens in the space .
+The score will be represented and updated on the screen, and the score will increase every time the player’s laser destroy an alien and each time the player defeats the group of aliens, a new group of aliens will appear until the game is over due to one of the two reasons mentioned in the previous paragraph.
+
+The libraries that I may use:
+Pygame OR Tkinter
+Random
+os.path
+sys library
+
+First checkpoint November25: I hope to finish the coding for the ship’s and aliens’ shapes and for the background of the game and for the movements of both the ship and the aliens, and the fire of the laser cannons.
+
+Second Checkpoint December 6: I will be finishing the remaining parts such as, collisions conditions, the game over conditions, the score and the earning points and the sound effects…etc.
