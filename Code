@@ -1,0 +1,882 @@
+#Andrew ID: gsaad
+#Name: Ghassan Saad
+# Final Project
+# Course:15-112
+
+# Importing the Libraries
+
+import pickle
+import socket
+from pygame import *
+import sys
+from os.path import abspath, dirname
+from random import randint, choice
+
+# class related to the ships
+class Fighter(sprite.Sprite):
+    def __init__(self, num=1):
+        # if num=1 means 1 player
+        sprite.Sprite.__init__(self)
+        self.picture = PICS['myship']
+        if num!=1:
+           #means 2 players
+            self.picture = PICS['myship2']            
+          #the explosion or destruction when an invader laser will
+            # hit the ships
+        self.destroyimage = PICS['destroyblue']
+        # tranforming the size of the picture
+        self.picture = transform.scale(self.picture, (64, 64))
+        self.rect = self.picture.get_rect(topleft=(375, 540))
+        self.speed = 5
+        self.num=num
+        self.shipAlive=True
+
+# updating function
+    def update(self, keys, *args):
+        #if 1 player 
+        if self.num==1:
+            # press left arrow position decrease
+            if keys[K_LEFT] and self.rect.x > 10:
+                self.rect.x -= self.speed
+                #press right arrow position increase
+            if keys[K_RIGHT] and self.rect.x < 740:
+                self.rect.x += self.speed
+        else:
+            # second player
+             # press left arrow position decrease
+            if keys[K_z] and self.rect.x > 10:
+                self.rect.x -= self.speed
+                 # press c arrow position increase
+            if keys[K_c] and self.rect.x < 740:
+                self.rect.x += self.speed
+            
+        
+        if self.shipAlive:
+            # this command related to  images
+            game.window.blit(self.picture, self.rect)
+        else:
+            game.window.blit(self.destroyimage, self.rect)
+        
+    def draw(self,window):
+        if self.shipAlive:
+            game.window.blit(self.picture, self.rect)
+        else:
+            game.window.blit(self.destroyimage, self.rect)
+
+    # save (server)
+    def save(self):
+        args=[self.rect.x,self.rect.y,self.speed]
+        return args
+    #load for the server
+    def load(self,args):
+        self.rect.x,self.rect.y,self.speed=args
+        
+
+# the fire or the bullets
+class Fire(sprite.Sprite):
+    def __init__(self, x, y, position, velocity, filename, side):
+        # sprite means any object on the screen which
+        #can move and and interact
+        sprite.Sprite.__init__(self)
+        self.picture = PICS[filename]
+        self.rect = self.picture.get_rect(topleft=(x, y))
+        self.velocity = velocity
+        self.position = position
+        self.side = side
+        self.filename = filename
+
+    def save(self):
+        args=[self.rect.x,self.rect.y,self.velocity,self.position,self.side,self.filename]
+        return args
+    
+    def load(self,args):
+        self.rect.x,self.rect.y,self.velocity,self.position,self.side,self.filename=args
+
+# update function
+    def update(self, keys, *args):
+        game.window.blit(self.picture, self.rect)
+        # changing the y coordinate of the laser
+        self.rect.y += self.velocity * self.position
+        if self.rect.y < 15 or self.rect.y > 600:
+            self.kill()
+# Invader class
+
+class   Invader(sprite.Sprite):
+    #attributes for their position
+    #size
+    #and movemonets
+    def __init__(self, row, column):
+        sprite.Sprite.__init__(self)
+        self.row = row
+        self.column = column
+        self.pictures = []
+        self.importpictures()
+        self.position = 0
+        self.picture = self.pictures[self.position]
+        self.rect = self.picture.get_rect()
+        self.MoveTo = 1
+        self.right = 30
+        self.left=  30
+        self.Steps = 15
+        self.Time = 600
+        self.timer = time.get_ticks()
+
+    def save(self):
+        args=[self.row,self.column,self.position,self.rect.x,self.rect.y,self.MoveTo,self.right, self.left,self.Steps,self.Time,self.timer]
+        return args
+
+    def load(self,args):
+        self.row,self.column,self.position,self.rect.x,self.rect.y,self.MoveTo,self.right, self.left,self.Steps,self.Time,self.timer=args
+        self.picture = self.picture[self.position]
+        
+# upadting function
+    def update(self, keys, present, invaders):
+        if present - self.timer > self.Time:
+            if self.MoveTo == 1:
+                # making and increasing the steps to the right
+                Limit = self.right + invaders.OneRightStep
+            else:
+                # making steps to the lest
+                Limit = self.left + invaders.OneLeftStep
+
+            if self.Steps >= Limit:
+                if self.MoveTo == 1:
+                    self.left = 30 + invaders.OneRightStep
+                elif self.MoveTo == -1:
+                    self.right = 30 + invaders.OneLeftStep
+                self.MoveTo *= -1
+                self.Steps = 0
+                # y coordinate of the invader 
+                self.rect.y += 35
+            elif self.MoveTo == 1:
+                #updating  x cooredinates of the invaders
+                self.rect.x += 10
+                self.Steps += 1
+            elif self.MoveTo == -1:
+                self.rect.x -= 10
+                self.Steps += 1
+
+            self.position += 1
+            if self.position >= len(self.pictures):
+                self.position = 0
+            self.picture = self.pictures[self.position]
+
+            self.timer += self.Time
+
+        game.window.blit(self.picture, self.rect)
+
+    def importpictures(self):
+        # assigning the squence and the rows of the
+        # of the invaders
+        pictures = { 0 : ['3', '4'],1: ['1', '2'],
+                  2: ['1', '2'],3: ['5', '6'],4: ['5', '6'],}
+        pic1, pic2 = (PICS['invader{}'.format(pic)] for pic in
+                      pictures[self.row])
+        self.pictures.append(transform.scale(pic1, (40, 35)))
+        self.pictures.append(transform.scale(pic2, (40, 35)))
+
+
+class InvaderTeam(sprite.Group):
+    def __init__(self, columns, rows):
+        # Since we have many invaders and
+        # enemies we use Sprite.Group
+        # to gather them and make a common ation
+        sprite.Group.__init__(self)
+        self.invaders = [[0] * columns for _ in range(rows)]
+        self.columns = columns
+        self.rows = rows
+        self.OneLeftStep = 0
+        self.OneRightStep = 0
+        self.LiveCol = list(range(columns))
+        self.LLiveCol = 0
+        self.RLiveCol = columns - 1
+        self.LKilled = 0
+        self.RKilled = 0
+
+
+    def save(self):
+        cols=10
+        rows=5
+        args=[[self.columns,self.rows,self.OneLeftStep,self.OneRightStep,self.LiveCol,self.LLiveCol,self.RLiveCol, self.LKilled,self.RKilled]]
+        args2=[[0] * cols for _ in range(rows)]
+        for i in range(rows):
+            for j in range(cols):
+                if self.invaders[i][j]==None:
+                    args2[i][j]=None
+                else:
+                    args2[i][j]=self.invaders[i][j].save()
+        args.append(args2)
+        return args
+
+    def load(self,args):
+        self.empty()
+
+        cols=10
+        rows=5
+        self.invaders = [[0] * cols for _ in range(rows)]
+        self.columns = cols
+        self.rows = rows
+        self.OneLeftStep = 0
+        self.OneRightStep = 0
+        self.LiveCol = list(range(cols))
+        self.LLiveCol = 0
+        self.RLiveCol = cols - 1
+        self.LKilled = 0
+        self.RKilled = 0
+        
+        self.columns,self.rows,self.OneLeftStep,self.OneRightStep,self.LiveCol,self.LLiveCol,self.RLiveCol, self.LKilled,self.RKilledCol=args[0]
+
+        args2=args[1]
+        for i in range(rows):
+            for j in range(cols):
+                if args2[i][j]==None:
+                    self.invaders[i][j]=None
+                else:
+                    invader = Invader(i, j)
+                    invader.load(args2[i][j])
+                    self.add(invader)
+
+# Adding multiple charecters
+    def add(self, *sprites):
+        super(sprite.Group, self).add(*sprites)
+
+        for s in sprites:
+            self.invaders[s.row][s.column] = s
+# Checking if the invaders killed
+    def DeadCheck(self, column):
+        for row in range(self.rows):
+            if self.invaders[row][column]:
+                return False
+        return True
+
+    def randpress(self):
+        randpos = randint(0, len(self.LiveCol) - 1)
+        col = self.LiveCol[randpos]
+        for row in range(self.rows, 0, -1):
+            invader = self.invaders[row - 1][col]
+            if invader:
+                return invader
+        return None
+# checking if the invaders are killed \
+# then it removes the killed ones
+    def dead(self, invader):
+        # on double hit calls twice for same enemy, so check before
+        if not self.invaders[invader.row][invader.column]:
+            return  # nothing to kill
+
+        self.invaders[invader.row][invader.column] = None
+        CheckDead = self.DeadCheck(invader.column)
+        # if they are killed remove them
+        if CheckDead:
+            self.LiveCol.remove(invader.column)
+
+        if invader.column == self.RLiveCol:
+            while self.RLiveCol > 0 and CheckDead:
+                self.RLiveCol -= 1
+                self.RKilled += 1
+                self.OneRightStep = self.RKilled * 5
+                CheckDead = self.DeadCheck(self.RLiveCol)
+
+        elif invader.column == self.LLiveCol:
+            while self.LLiveCol < self.columns and CheckDead:
+                self.LLiveCol += 1
+                self.LKilled += 1
+                self.OneLeftStep = self.LKilled * 5
+                CheckDead = self.DeadCheck(self.LLiveCol)
+
+# Defender Blocks
+class Defender(sprite.Sprite):
+    #Atrributes for the size
+    # the color
+    # their positions
+    def __init__(self, size, color, row, column):
+        sprite.Sprite.__init__(self)
+        self.height = size
+        self.width = size
+        self.color = color
+        self.picture = Surface((self.width, self.height))
+        self.picture.fill(self.color)
+        self.rect = self.picture.get_rect()
+        self.row = row
+        self.column = column
+
+    def update(self, keys, *args):
+        game.window.blit(self.picture, self.rect)
+
+
+# Chance and lives the players have
+class Chances(sprite.Sprite):
+    def __init__(self, x, y):
+        sprite.Sprite.__init__(self)
+        self.picture = PICS['heart']
+        self.picture = transform.scale(self.picture, (23, 23))
+        self.rect = self.picture.get_rect(topleft=(x, y))
+
+    def update(self, keys, *args):
+        game.window.blit(self.picture, self.rect)
+# Function for the messages and writings
+# that will appear on the screen
+
+class Messages(object):
+    def __init__(self, textFont, size, message, color, x, y):
+        self.font = font.Font(textFont, size)
+        self.surface = self.font.render(message, True, color)
+        self.rect = self.surface.get_rect(topleft=(x, y))
+
+    def draw(self, surface):
+        surface.blit(self.surface, self.rect)
+
+
+class THEGAME(object):
+    def __init__(self):
+        # Making the instance Attribution
+        init()
+        self.lastTime= time.get_ticks()
+        self.caption = display.set_caption('Space Invaders')
+        self.window = GAME_WINDOW
+        self.background = image.load(IMAGE_PATH + 'game_background.jpg').convert()
+        self.startGame = False
+        self.mainScreen = True
+        self.gameOver = False
+        # Initial value for a new game
+        self.InvaderPos = 65
+        # Counter for enemy starting position (increased each new round)
+        self.InvaderStartLoc = self.InvaderPos
+        # Current enemy starting position
+        self.InvaderPos2 = self.InvaderStartLoc
+        
+        self.player = Fighter()
+        self.player2 = None
+        self.numPlayers=1
+        #( Assigning 5 rows and ten columns
+        self.invaders = InvaderTeam(10, 5)
+        self.bullets = sprite.Group()
+        self.InvaderFire = sprite.Group()
+        self.DefendTeam = sprite.Group(self.createdefenders(0),
+                                        self.createdefenders(1),
+                                        self.createdefenders(2),
+                                        self.createdefenders(3))
+
+        self.reset_lives(3)
+        self.clock = time.Clock()
+        self.timer = time.get_ticks()
+        self.noteTimer = time.get_ticks()
+        self.shipTimer = time.get_ticks()
+        self.shipTimer2 = time.get_ticks()
+        self.score = 0
+        self.lives = 3
+        self.write()
+
+#        if len(sys.argv)>1: #Client
+#            #HOST = '192.168.1.242'
+#            HOST = '127.0.0.1'
+#            PORT = 50011
+#            print('Client {} {}'.format(HOST,PORT))
+#            self.conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#            self.conn.connect((HOST, PORT))
+#            self.conn.setblocking(0)
+#                        
+#        else:
+#            HOST = '127.0.0.1'
+#            PORT = 50011
+#            print('Server {} {}'.format(HOST,PORT))
+#            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#            s.bind((HOST, PORT))
+#            s.listen(1)
+#            self.conn, addr = s.accept()
+
+
+    def save(self):
+        args=[self.startGame,self.mainScreen,self.gameOver,self.score,self.lives]
+        return args
+
+    def load(self,args):
+        self.startGame,self.mainScreen,self.gameOver,self.score,self.lives=args
+        
+        
+    # reseting the game    
+    def reset(self, score, lives, newGame=False):
+        self.player = Fighter()
+        if self.numPlayers==1:
+            self.player2 = None
+        else:           
+            self.player2 = Fighter(2)
+            # reseting by calling the sprite groups again
+        self.bullets = sprite.Group()
+        self.InvaderFire = sprite.Group()
+        #By reseting the lives
+        self.reset_lives(lives)
+        # checking invader positions
+        #and return them to their start location
+        self.InvaderPos2 = self.InvaderStartLoc
+        self.createinvaders()
+        # Only create blockers on a new game, not a new round
+        #Not in the next levels
+        if newGame:
+            self.DefendTeam = sprite.Group(self.createdefenders(0),
+                                            self.createdefenders(1),
+                                            self.createdefenders(2),
+                                            self.createdefenders(3))
+        self.keys = key.get_pressed()
+        self.clock = time.Clock()
+        self.timer = time.get_ticks()
+        self.noteTimer = time.get_ticks()
+        self.shipTimer = time.get_ticks()
+        self.score = score
+        self.lives = lives
+        self.write()
+        self.makeNewShip = False
+        self.makeNewShip2 = False
+
+# function that make the defender blocks
+    def createdefenders(self, number):
+        DefenderT = sprite.Group()
+        for row in range(4):
+            for column in range(9):
+                defender = Defender(10, RED, row, column)
+                defender.rect.x = 50 + (200 * number) + (column * defender.width)
+                defender.rect.y = 450 + (row * defender.height)
+                DefenderT.add(defender)
+        return DefenderT
+#reseting the above images that
+    # show you how many chances
+    #you have
+    def chancessprites(self):
+        self.chance1 = Chances(715, 3)
+        self.chance2 = Chances(742, 3)
+        self.chance3 = Chances(769, 3)
+# decreasing the pictures or the sprites each time
+# a ship is hitted
+        if self.lives == 3:
+            self.livesGroup = sprite.Group(self.chance1, self.chance2, self.chance3)
+        elif self.lives == 2:
+            self.livesGroup = sprite.Group(self.chance1, self.chance2)
+        elif self.lives == 1:
+            self.livesGroup = sprite.Group(self.chance1)
+
+    def reset_lives(self, lives):
+        self.lives = lives
+        self.chancessprites()
+# a function for the texts that ill appear on the screen
+
+    def write(self):
+        self.titleText = Messages(FONT, 50, 'Space Invaders', WHITE, 164, 100)
+        self.titleText2 = Messages(FONT, 25, 'Press 1 for 1-Player mode', WHITE,
+                               201, 175)
+        self.titleText3 = Messages(FONT, 25, 'Press 2 for 2-Player mode', WHITE,
+                               201, 220)
+        self.gameOverText = Messages(FONT, 50, 'Game Over', WHITE, 250, 270)
+        self.nextRoundText = Messages(FONT, 50, 'Next Round', WHITE, 240, 270)
+        self.invader1info = Messages(FONT, 25, '   =   10 pts', GREEN, 368, 270)
+        self.invader2info = Messages(FONT, 25, '   =  20 pts', PURPLE, 368, 320)
+        self.invader3info = Messages(FONT, 25, '   =  30 pts', BLUE, 368, 370)
+        self.invader4info = Messages(FONT, 25, '   =  ?????', RED, 368, 420)
+        self.scoreText = Messages(FONT, 20, 'Score', WHITE, 5, 5)
+        self.livesText = Messages(FONT, 20, 'Lives ', WHITE, 640, 5)
+
+    @staticmethod
+    # Assign the exit buttons
+    def Exit(evt):
+        # type: (pygame.event.EventType) -> bool
+        return evt.type == QUIT or (evt.type == KEYUP and evt.key == K_ESCAPE)
+# checking the pressed buttons
+# for shooting and moving
+# and making the sound effects
+
+    def buttonspressed(self):
+        self.keys = key.get_pressed()
+        if len(self.bullets)>6:
+            return
+        if self.keys[K_UP]:
+            if self.player.shipAlive:
+                if self.score < 1000:
+                    bullet = Fire(self.player.rect.x + 23,
+                                    self.player.rect.y + 5, -1,
+                                    15, 'laserinvader', 'center')
+                    self.bullets.add(bullet)
+                    mixer.music.load('gun.mp3')
+                    mixer.music.play(0)
+
+                else:
+                    leftbullet = Fire(self.player.rect.x + 8,
+                                        self.player.rect.y + 5, -1,
+                                        15, 'laserinvader', 'center')
+                    rightbullet = Fire(self.player.rect.x + 38,
+                                         self.player.rect.y + 5, -1,
+                                         15, 'laserinvader', 'center')
+                    self.bullets.add(leftbullet)
+                    self.bullets.add(rightbullet)
+        if self.numPlayers!=1 and self.keys[K_s]:
+            if self.player2.shipAlive:
+                if self.score < 1000:
+                    bullet = Fire(self.player2.rect.x + 23,
+                                    self.player2.rect.y + 5, -1,
+                                    15, 'laserinvader', 'center')
+                    self.bullets.add(bullet)
+                    mixer.music.load('gun.mp3')
+                    mixer.music.play(0)
+
+                else:
+                    leftbullet = Fire(self.player2.rect.x + 8,
+                                        self.player2.rect.y + 5, -1,
+                                        15, 'laserinvader', 'center')
+                    rightbullet = Fire(self.player2.rect.x + 38,
+                                         self.player2.rect.y + 5, -1,
+                                         15, 'laserinvader', 'center')
+                    self.bullets.add(leftbullet)
+                    self.bullets.add(rightbullet)
+
+
+        for e in event.get():
+            if self.Exit(e):
+                sys.exit()
+# creating the group of invaders
+
+    def createinvaders(self):
+        invaders = InvaderTeam(10, 5)
+        for row in range(5):
+            for column in range(10):
+                invader = Invader(row, column)
+                invader.rect.x = 157 + (column * 50)
+                invader.rect.y = self.InvaderPos2 + (row * 45)
+                invaders.add(invader)
+
+        self.invaders = invaders
+# function to allow the invaders to shoot
+
+    def invadershoot(self):
+        if (time.get_ticks() - self.timer) > 700:
+            # invaders shoot in a random sequence
+            invader = self.invaders.randpress()
+            if invader:
+                mixer.music.load('blop.mp3')
+                mixer.music.play(0)
+
+                self.InvaderFire.add(
+                    Fire(invader.rect.x + 14, invader.rect.y + 20, 1, 5,
+                           'laserGREEN', 'center'))
+                self.timer = time.get_ticks()
+# calculating the scores and assining it in each row
+    def Score(self, row):
+        scores = {1: 30,2: 20,3: 20,4: 10,5: 10,
+                  0: choice([50, 100, 150, 300])}
+
+        score = scores[row]
+        self.score += score
+        return score
+# create and publish what will apear on the main screen
+    def PublishMain(self):
+        self.invader1 = PICS['invader5']
+        self.invader1 = transform.scale(self.invader1, (40, 40))
+        self.invader2 = PICS['invader2']
+        self.invader2 = transform.scale(self.invader2, (40, 40))
+        self.invader3 = PICS['invader3']
+        self.invader3 = transform.scale(self.invader3, (40, 40))
+        self.invader4 = PICS['invader7']
+        self.invader4 = transform.scale(self.invader4, (80, 40))
+        self.window.blit(self.invader1, (318, 270))
+        self.window.blit(self.invader2, (318, 320))
+        self.window.blit(self.invader3, (318, 370))
+        self.window.blit(self.invader4, (299, 420))
+
+        for e in event.get():
+            if self.Exit(e):
+                sys.exit()
+            self.keys = key.get_pressed()
+            if self.keys[K_1]:
+                self.numPlayers=1
+                self.startGame = True
+                self.mainScreen = False
+                self.player2 = None
+            elif self.keys[K_2]:
+                self.numPlayers=2
+                self.startGame = True
+                self.mainScreen = False
+                self.player2 = Fighter(2)
+# updating the speed of the enemis
+    def SpeedChange(self):
+        if len(self.invaders) <= 10:
+            for invader in self.invaders:
+                invader.Time = 400
+        if len(self.invaders) == 1:
+            for invader in self.invaders:
+                invader.Time = 200
+# checking for all the collisions
+# between lasers
+# laser and invader
+#laser and fighters
+    def Collide(self):
+        collidedict = sprite.groupcollide(self.bullets, self.InvaderFire,
+                                          True, False)
+        if collidedict:
+            for value in collidedict.values():
+                for currentSprite in value:
+                    self.InvaderFire.remove(currentSprite)
+
+        enemiesdict = sprite.groupcollide(self.bullets, self.invaders,
+                                          True, False)
+        if enemiesdict:
+            for value in enemiesdict.values():
+                for currentSprite in value:
+                    self.invaders.dead(currentSprite)
+                    score = self.Score(currentSprite.row)
+                    self.invaders.remove(currentSprite)
+                    break
+      
+        if self.numPlayers!=1:
+            playerGroup = sprite.Group(self.player,self.player2)
+        else:
+            playerGroup = sprite.Group(self.player)
+        bulletsdict = sprite.groupcollide(self.InvaderFire, playerGroup,
+                                          True, False)
+        if bulletsdict:
+            for value in bulletsdict.values():
+                for playerShip in value:
+                    playerShip.shipAlive = False
+                    playerShip.draw(self.window)
+                    mixer.music.load('dead.mp3')
+                    mixer.music.play(0)                    
+                    if self.lives == 3:
+                        self.lives -= 1
+                        self.livesGroup.remove(self.chance3)
+                    elif self.lives == 2:
+                        self.lives -= 1
+                        self.livesGroup.remove(self.chance2)
+                    elif self.lives == 1:
+                        self.lives -= 1
+                        self.livesGroup.remove(self.chance1)    
+                    elif self.lives == 0:
+                        self.gameOver = True
+                        self.startGame = False
+
+                    if playerShip.num==1:                       
+                        self.makeNewShip = True
+                        self.shipTimer = time.get_ticks()
+                    if playerShip.num==2:                       
+                        self.makeNewShip2 = True
+                        self.shipTimer2 = time.get_ticks()
+
+        if sprite.groupcollide(self.invaders, playerGroup, True, True):
+            self.gameOver = True
+            self.startGame = False
+
+        sprite.groupcollide(self.bullets, self.DefendTeam, True, True)
+        sprite.groupcollide(self.InvaderFire, self.DefendTeam, True, True)
+        sprite.groupcollide(self.invaders, self.DefendTeam, False, True)
+# REMAKING A SHIP EACH TIME A SHIP ISHITTED BEFORE THE GAME IS
+# OVER OR WHEN THE GAME IS RESETTED
+    def MakeShip(self, present):
+        if self.makeNewShip and (present - self.shipTimer > 900):
+            self.player = Fighter()
+            self.makeNewShip = False
+        if self.numPlayers!=1 and self.makeNewShip2 and (present - self.shipTimer2 > 900):
+            self.player2 = Fighter(num=2)
+            self.makeNewShip2 = False
+
+            
+
+
+# MAKING THE GAME OVER MESSAGE TO APPEAR
+    def GAMEOVER(self, present):
+        self.window.blit(self.background, (0, 0))
+        passed = present - self.timer
+        if passed < 750:
+            self.gameOverText.draw(self.window)
+        elif 750 < passed < 1500:
+            self.window.blit(self.background, (0, 0))
+        elif 1500 < passed < 2250:
+            self.gameOverText.draw(self.window)
+        elif 2250 < passed < 2750:
+            self.window.blit(self.background, (0, 0))
+        elif passed > 3000:
+            self.mainScreen = True
+
+        for e in event.get():
+            if self.Exit(e):
+                sys.exit()
+#The main function whic is like the engine
+ # of the game that uses all what
+ # we implement before
+    def main(self):
+        present = time.get_ticks()
+        if len(sys.argv)>1: #Client:
+            self.reset(0, 3, True)
+            self.window.blit(self.background, (0, 0))
+            self.titleText.draw(self.window)
+            self.titleText2.draw(self.window)
+            self.titleText3.draw(self.window)
+            self.invader1info.draw(self.window)
+            self.invader2info.draw(self.window)
+            self.invader3info.draw(self.window)
+            self.invader4info.draw(self.window)
+            self.PublishMain()
+            self.lastTime=present-10000
+            print('start')
+            while True:
+                if True: #Client
+                    while True:
+                        try:
+#                            self.lastTime=present 
+#                            xxdata = self.conn.recv(4096)
+#                            xxargs = pickle.loads(xxdata)
+#                            print('Client read args {}'.format(len(xxargs)))
+
+#                            args0,args1,args2,args3,args4=xxargs
+#                            self.load(args0)
+#                            self.player.load(args1)
+#                            self.invaders.load(args2)
+#                            
+#                            self.InvaderFire.empty() 
+#                            for bullet in args3:
+#                                b=Fire(100,100, 1, 5,'laserGREEN', 'center')
+#                                b.load(bullet)
+#                                self.InvaderFire.add(b)
+#                                
+#                            self.bullets.empty()
+#                            for bullet in args4:
+#                                b=Fire(100,100, -1, 15,'laserinvader', 'center')
+#                                b.load(bullet)
+#                                self.bullets.add(b)
+#                            print('Added {}+{} bullets'.format(len(args3),len(args4)))
+#                            self.conn.sendall(b'OK')     
+                            break
+                        except Exception as e:
+#                            print('Exception '+str(e))
+#                            self.conn.sendall(b'Error')     
+#                            print('Try again')
+                            break
+                print('drawing')
+                self.score+=1
+                print(self.score)
+        
+                self.window.blit(self.background, (0, 0))
+#                self.DefenderTeam.update(self.screen)
+                self.scoreText2 = Messages(FONT, 20, str(self.score), GREEN,
+                                       85, 5)
+                self.scoreText.draw(self.window)
+                self.scoreText2.draw(self.window)
+                self.livesText.draw(self.window)
+
+#                self.InvaderFire.draw(self.window)
+#                self.bullets.draw(self.window)
+#                self.invaders.draw(self.window)
+#                self.livesGroup.draw(self.window)
+                self.player.draw(self.window)
+                if self.numPlayers!=1:
+                    self.player2.draw(self.window)
+#                display.update()
+                display.flip()
+
+        else: #Server:        
+            while True:
+                if self.mainScreen:
+                    self.reset(0, 3, True)
+                    self.window.blit(self.background, (0, 0))
+                    self.titleText.draw(self.window)
+                    self.titleText2.draw(self.window)
+                    self.titleText3.draw(self.window)
+                    self.invader1info.draw(self.window)
+                    self.invader2info.draw(self.window)
+                    self.invader3info.draw(self.window)
+                    self.invader4info.draw(self.window)
+                    self.PublishMain()
+    
+                elif self.startGame:
+                    if len(self.invaders) == 0 and len(sys.argv)<=1:
+                        present = time.get_ticks()
+                        # Move enemies closer to bottom
+                        self.InvaderStartLoc += 35
+                        self.reset(self.score, self.lives)
+                    else:
+                        present = time.get_ticks()
+                           
+                        self.window.blit(self.background, (0, 0))
+                        self.DefendTeam.update(self.window)
+                        self.scoreText2 = Messages(FONT, 20, str(self.score), GREEN,
+                                               85, 5)
+                        self.scoreText.draw(self.window)
+                        self.scoreText2.draw(self.window)
+                        self.livesText.draw(self.window)
+                        
+                        self.buttonspressed()
+                        self.InvaderFire.update(self.keys, present,self.invaders)
+                        self.bullets.update(self.keys, present,self.invaders)
+                        self.livesGroup.update(self.keys, present,self.invaders)
+                        self.player.update(self.keys, present,self.invaders)
+                        if self.numPlayers!=1:
+                            self.player2.update(self.keys, present,self.invaders)
+                        self.invaders.update(self.keys, present,self.invaders)
+                            
+                        self.Collide()
+                        self.MakeShip(present)
+                        self.SpeedChange()
+                        if len(self.invaders) > 0:
+                            self.invadershoot()
+                                
+    
+                        if present-self.lastTime>100: #Server
+                            try:
+                                self.lastTime=present
+                                args0=self.save()
+                                args1=[]
+#                                args1=self.player.save()
+                                args2=[]
+#                                args2=self.invaders.save()
+                                args3=[]
+#                                for bullet in self.InvaderFire.sprites():
+#                                    args3.append(bullet.save())
+                                args4=[]
+#                                for bullet in self.bullets.sprites():
+#                                    args4.append(bullet.save())
+                                args=[args0,args1,args2,args3,args4]
+        
+                                data_string = pickle.dumps(args)
+#                                self.conn.sendall(data_string)          
+#                                print('Server sent args {}'.format(len(args)))
+#                                response = self.conn.recv(4096)
+                            except Exception as e:
+                                print('Exception '+str(e))
+    
+    
+                elif self.gameOver:
+                    present = time.get_ticks()
+                    # Reset enemy starting position
+                    self.InvaderStartLoc = self.InvaderPos
+                    self.GAMEOVER(present)
+    
+                display.update()
+                self.clock.tick(60)
+# colors used for the messages
+WHITE = (255, 255, 255)
+GREEN = (78, 255, 87)
+YELLOW = (241, 255, 0)
+BLUE = (80, 255, 239)
+PURPLE = (203, 0, 255)
+RED = (237, 28, 36)
+# Paths for font sound and pictures
+BASE_PATH = ''
+FONT_PATH = ''
+IMAGE_PATH = ''
+SOUND_PATH = ''
+
+
+# Creating the game screen and window
+# Window dimensions (800x600)
+GAME_WINDOW = display.set_mode((800, 600))
+# The type of font used for the texts and messages
+# appear in screen
+FONT = FONT_PATH + 'pdark.ttf'
+# Assingning the pictures that represent the shape of the
+# invaders, space ship, lasers, and background of the game...etc
+Assign_Pic = ['myship', 'myship2','invader7','heart']+['invader'+str(i) for i in range(1,7)]+['destroyblue', 'destroygreen', 'destroypurple',
+             'laserinvader', 'laserGREEN']
+Assign_Pics = ['{}.png'.format(name) for name in Assign_Pic]
+#IMG_NAMES[0]='myship.jpg'
+# Calling the pictures
+PICS = {pic[:-4]: image.load(pic).convert_alpha()
+          for pic in Assign_Pics}
+
+if __name__ == '__main__':
+    print('Usage:\nOn server, run "python space3.py"\nOn client run "python space3.py client"')
+    game = THEGAME()
+    game.main()
